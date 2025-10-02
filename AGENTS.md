@@ -23,3 +23,7 @@ The history currently follows Conventional Commits (`feat: initial commit`); con
 
 ## Security & Configuration Notes
 Bookmark discovery reads paths inside the Chrome profile under the current user (`~/Library/...` on macOS, `%LOCALAPPDATA%\\Google\\Chrome\\...` on Windows). Never commit real bookmark files or personal data. Use the existing TLS-enabled `reqwest` client; avoid enabling `default-features` unless you have audited the impact.
+
+## IMPORTASNT Rules
+- Write ideomatic Rust code.
+- Follow Single Responsibility Principle.
