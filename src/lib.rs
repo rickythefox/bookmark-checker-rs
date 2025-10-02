@@ -35,6 +35,7 @@ pub enum BookmarkError {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RunConfig {
     pub max_bookmarks: Option<usize>,
+    pub list_profiles: bool,
 }
 
 impl Display for BookmarkError {
@@ -95,6 +96,27 @@ pub fn run() -> Result<(), BookmarkError> {
 }
 
 pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
+    if config.list_profiles {
+        let profiles = locator::list_profiles()?;
+
+        if profiles.is_empty() {
+            println!("No Chrome profiles with bookmarks found.");
+        } else {
+            println!("Available Chrome profiles:");
+            for location in profiles {
+                let name = location
+                    .directory
+                    .file_name()
+                    .map(|value| value.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| location.directory.display().to_string());
+
+                println!("- {name} ({})", location.file.display());
+            }
+        }
+
+        return Ok(());
+    }
+
     let (location, bookmarks) = gather_bookmarks()?;
 
     if bookmarks.is_empty() {

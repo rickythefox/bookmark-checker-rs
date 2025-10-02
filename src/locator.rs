@@ -1,4 +1,5 @@
 use crate::{BookmarkError, BookmarkLocation};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) fn locate() -> Result<BookmarkLocation, BookmarkError> {
@@ -13,6 +14,42 @@ pub(crate) fn bookmarks_directory() -> Option<PathBuf> {
 
 pub(crate) fn bookmarks_file() -> Option<PathBuf> {
     platform::bookmarks_file()
+}
+
+pub(crate) fn list_profiles() -> Result<Vec<BookmarkLocation>, BookmarkError> {
+    let root = profiles_root()?;
+    collect_profiles_from(&root)
+}
+
+fn profiles_root() -> Result<PathBuf, BookmarkError> {
+    let default_dir = bookmarks_directory().ok_or(BookmarkError::UnsupportedPlatform)?;
+    default_dir
+        .parent()
+        .map(|parent| parent.to_path_buf())
+        .ok_or_else(|| BookmarkError::MissingBookmarksDir(default_dir))
+}
+
+fn collect_profiles_from(root: &Path) -> Result<Vec<BookmarkLocation>, BookmarkError> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut profiles = Vec::new();
+
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            let directory = entry.path();
+            let file = directory.join("Bookmarks");
+            if file.exists() {
+                profiles.push(BookmarkLocation { directory, file });
+            }
+        }
+    }
+
+    profiles.sort_by(|a, b| a.directory.cmp(&b.directory));
+
+    Ok(profiles)
 }
 
 #[cfg(target_os = "macos")]
@@ -155,5 +192,56 @@ mod platform {
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn bookmarks_file() -> Option<PathBuf> {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn collect_profiles_includes_directories_with_bookmarks() {
+        let root = temp_profile_root();
+        let default_dir = root.join("Default");
+        let profile_dir = root.join("Profile 1");
+        let ignored_dir = root.join("System Profile");
+
+        fs::create_dir_all(&default_dir).unwrap();
+        fs::write(default_dir.join("Bookmarks"), "{}").unwrap();
+
+        fs::create_dir_all(&profile_dir).unwrap();
+        fs::write(profile_dir.join("Bookmarks"), "{}").unwrap();
+
+        fs::create_dir_all(&ignored_dir).unwrap();
+
+        let profiles = collect_profiles_from(&root).expect("profiles should be collected");
+
+        assert_eq!(profiles.len(), 2);
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.directory == default_dir)
+        );
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.directory == profile_dir)
+        );
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    fn temp_profile_root() -> PathBuf {
+        let mut root = std::env::temp_dir();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        root.push(format!("bookmark-checker-profiles-{unique}"));
+        fs::create_dir_all(&root).unwrap();
+        root
     }
 }
