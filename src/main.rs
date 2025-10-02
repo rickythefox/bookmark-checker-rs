@@ -1,4 +1,4 @@
-use bookmark_checker::{RunConfig, run_with_config};
+use bookmark_checker::{RunConfig, VERSION, run_with_config};
 use std::env;
 use std::process;
 
@@ -14,6 +14,7 @@ OPTIONS:
     -l, --list-profiles          List detected Chrome profiles and exit.
     -p, --profile <name>         Select a profile instead of the default "Default".
     -c, --clean                  Remove bookmarks listed in bookmark_failures.yml.
+    -V, -v, --version            Print the app version and exit.
     -h, --help                   Show this help text.
 
 If run without flags, the tool checks every bookmark in the default profile.
@@ -28,6 +29,11 @@ fn main() {
             process::exit(2);
         }
     };
+
+    if config.show_version {
+        println!("{}", VERSION);
+        return;
+    }
 
     if let Err(err) = run_with_config(config) {
         eprintln!("{err}");
@@ -64,6 +70,9 @@ fn parse_args() -> Result<RunConfig, String> {
             "--clean" | "-c" => {
                 config.clean = true;
             }
+            "--version" | "-V" | "-v" => {
+                config.show_version = true;
+            }
             "--help" | "-h" => {
                 println!("{HELP}");
                 process::exit(0);
@@ -76,6 +85,15 @@ fn parse_args() -> Result<RunConfig, String> {
 
     if config.clean && config.list_profiles {
         return Err("--clean cannot be combined with --list-profiles".into());
+    }
+
+    if config.show_version
+        && (config.clean
+            || config.list_profiles
+            || config.max_bookmarks.is_some()
+            || config.profile.is_some())
+    {
+        return Err("--version cannot be combined with other options".into());
     }
 
     Ok(config)

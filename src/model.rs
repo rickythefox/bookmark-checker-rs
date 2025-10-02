@@ -35,6 +35,7 @@ pub struct RunConfig {
     pub list_profiles: bool,
     pub profile: Option<String>,
     pub clean: bool,
+    pub show_version: bool,
 }
 
 impl Display for BookmarkError {

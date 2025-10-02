@@ -2,7 +2,7 @@ use crate::checker::check_bookmarks;
 use crate::cleaner;
 use crate::model::{Bookmark, BookmarkError, BookmarkLocation, RunConfig};
 use crate::report::{FAILURE_REPORT_FILE, FailureReporter};
-use crate::{locator, parser};
+use crate::{VERSION, locator, parser};
 use std::fs;
 use std::path::Path;
 
@@ -13,6 +13,11 @@ pub fn run() -> Result<(), BookmarkError> {
 pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
     if config.clean {
         return clean_from_report(&config);
+    }
+
+    if config.show_version {
+        println!("{}", VERSION);
+        return Ok(());
     }
 
     if config.list_profiles {

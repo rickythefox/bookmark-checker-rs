@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  determine-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version.outputs.should_release }}
+      current_version: ${{ steps.version.outputs.current_version }}
+      latest_version: ${{ steps.version.outputs.latest_version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Verify formatting
+        run: cargo fmt --check
+
+      - name: Lint with clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Determine release necessity
+        id: version
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "Detected crate version: $VERSION"
+
+          API_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest"
+          RESPONSE=$(curl -sS -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" "$API_URL" || echo '{}')
+
+          LATEST=$(echo "$RESPONSE" | jq -r '.tag_name // empty')
+          if [ -n "$LATEST" ]; then
+            LATEST=${LATEST#v}
+            echo "Latest release version: $LATEST"
+          else
+            echo "No existing releases found."
+          fi
+
+          SHOULD_RELEASE="false"
+          if [ -z "$LATEST" ]; then
+            SHOULD_RELEASE="true"
+          else
+            HIGHEST=$(printf '%s\n%s\n' "$LATEST" "$VERSION" | sort -V | tail -n1)
+            if [ "$HIGHEST" = "$VERSION" ] && [ "$VERSION" != "$LATEST" ]; then
+              SHOULD_RELEASE="true"
+            fi
+          fi
+
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "current_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest_version=$LATEST" >> "$GITHUB_OUTPUT"
+
+          if [ "$SHOULD_RELEASE" != "true" ]; then
+            echo "Crate version $VERSION is not newer than latest release ${LATEST:-none}."
+          fi
+
+  build-and-upload:
+    name: Build Artifacts
+    needs: determine-release
+    if: needs.determine-release.outputs.should_release == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_suffix: linux-x86_64
+            archive_ext: tar.gz
+            binary: bookmark-checker
+            strip_cmd: strip target/release/bookmark-checker
+            checksum_cmd: sha256sum artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-linux-x86_64.tar.gz > artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-linux-x86_64.tar.gz.sha256
+          - os: macos-latest
+            artifact_suffix: macos-universal
+            archive_ext: tar.gz
+            binary: bookmark-checker
+            strip_cmd: strip -x target/release/bookmark-checker
+            checksum_cmd: shasum -a 256 artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-macos-universal.tar.gz > artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-macos-universal.tar.gz.sha256
+          - os: windows-latest
+            artifact_suffix: windows-x86_64
+            archive_ext: zip
+            binary: bookmark-checker.exe
+            strip_cmd: ''
+            checksum_cmd: powershell -Command "Get-FileHash artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-windows-x86_64.zip -Algorithm SHA256 | ForEach-Object { \"$($_.Hash)  bookmark-checker-${{ needs.determine-release.outputs.current_version }}-windows-x86_64.zip\" } | Out-File -Encoding ascii artifacts/bookmark-checker-${{ needs.determine-release.outputs.current_version }}-windows-x86_64.zip.sha256"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Strip binary
+        if: matrix.strip_cmd != ''
+        shell: bash
+        run: ${{ matrix.strip_cmd }}
+
+      - name: Package artifact (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          VERSION: ${{ needs.determine-release.outputs.current_version }}
+        run: |
+          mkdir -p artifacts
+          tar -C target/release -czf "artifacts/bookmark-checker-${VERSION}-${{ matrix.artifact_suffix }}.${{ matrix.archive_ext }}" ${{ matrix.binary }}
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          VERSION: ${{ needs.determine-release.outputs.current_version }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $output = "bookmark-checker-$env:VERSION-${{ matrix.artifact_suffix }}.${{ matrix.archive_ext }}"
+          Compress-Archive -Path "target/release/${{ matrix.binary }}" -DestinationPath "artifacts/$output"
+
+      - name: Generate checksum
+        shell: bash
+        run: ${{ matrix.checksum_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bookmark-checker-${{ needs.determine-release.outputs.current_version }}-${{ matrix.artifact_suffix }}
+          path: artifacts/*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - determine-release
+      - build-and-upload
+    if: needs.determine-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.determine-release.outputs.current_version }}
+          name: v${{ needs.determine-release.outputs.current_version }}
+          files: artifacts/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
