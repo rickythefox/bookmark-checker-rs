@@ -41,7 +41,7 @@ fn main() {
     };
 
     if config.show_version {
-        println!("{}", VERSION);
+        println!("{VERSION}");
         return;
     }
 
@@ -53,8 +53,10 @@ fn main() {
 
 fn parse_args() -> Result<RunConfig, String> {
     let mut args = env::args().skip(1);
-    let mut config = RunConfig::default();
-    config.scan = false;
+    let mut config = RunConfig {
+        scan: false,
+        ..RunConfig::default()
+    };
 
     while let Some(arg) = args.next() {
         match arg.as_str() {

@@ -65,12 +65,11 @@ fn remove_targets(root: &mut Value, targets: &HashSet<String>) -> usize {
 fn remove_node(node: &mut Value, targets: &HashSet<String>) -> (usize, bool) {
     match node {
         Value::Object(map) => {
-            if map.get("type").and_then(Value::as_str) == Some("url") {
-                if let Some(url) = map.get("url").and_then(Value::as_str) {
-                    if targets.contains(url) {
-                        return (1, true);
-                    }
-                }
+            if map.get("type").and_then(Value::as_str) == Some("url")
+                && let Some(url) = map.get("url").and_then(Value::as_str)
+                && targets.contains(url)
+            {
+                return (1, true);
             }
 
             let mut removed = 0;

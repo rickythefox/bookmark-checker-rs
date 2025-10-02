@@ -16,7 +16,7 @@ pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
     }
 
     if config.show_version {
-        println!("{}", VERSION);
+        println!("{VERSION}");
         return Ok(());
     }
 
@@ -36,10 +36,7 @@ pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
     let processing = bookmarks.len();
 
     if processing == 0 {
-        println!(
-            "Bookmark limit of 0 prevents checking any entries ({} total found).",
-            total_found
-        );
+        println!("Bookmark limit of 0 prevents checking any entries ({total_found} total found).");
         return Ok(());
     }
 
@@ -144,10 +141,8 @@ fn load_bookmarks_from(path: &Path) -> Result<Vec<Bookmark>, BookmarkError> {
 fn apply_limit(bookmarks: &mut Vec<Bookmark>, limit: Option<usize>) -> usize {
     let total = bookmarks.len();
 
-    if let Some(max) = limit {
-        if max < bookmarks.len() {
-            bookmarks.truncate(max);
-        }
+    if let Some(max) = limit.filter(|&value| value < bookmarks.len()) {
+        bookmarks.truncate(max);
     }
 
     total

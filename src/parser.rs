@@ -14,16 +14,16 @@ fn extract_bookmarks(value: &Value) -> Vec<Bookmark> {
 
 fn collect_nodes(node: &Value, collected: &mut Vec<Bookmark>) {
     if let Some(object) = node.as_object() {
-        if object.get("type").and_then(Value::as_str) == Some("url") {
-            if let (Some(name), Some(url)) = (
+        if object.get("type").and_then(Value::as_str) == Some("url")
+            && let (Some(name), Some(url)) = (
                 object.get("name").and_then(Value::as_str),
                 object.get("url").and_then(Value::as_str),
-            ) {
-                collected.push(Bookmark {
-                    name: name.to_string(),
-                    url: url.to_string(),
-                });
-            }
+            )
+        {
+            collected.push(Bookmark {
+                name: name.to_string(),
+                url: url.to_string(),
+            });
         }
 
         if let Some(children) = object.get("children").and_then(Value::as_array) {
