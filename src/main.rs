@@ -5,11 +5,12 @@ use std::process;
 const HELP: &str = r#"bookmark-checker — audit Chrome bookmarks for unreachable URLs.
 
 USAGE:
-    bookmark-checker [OPTIONS]
+    bookmark-checker --scan [OPTIONS]    (alias: -s)
     bookmark-checker --list-profiles
     bookmark-checker --clean [--profile <name>]
 
 OPTIONS:
+    -s, --scan                   Check bookmarks and record unreachable URLs.
     -m, --max-bookmarks <count>  Limit how many bookmarks to check before stopping.
     -l, --list-profiles          List detected Chrome profiles and exit.
     -p, --profile <name>         Select a profile instead of the default "Default".
@@ -17,11 +18,20 @@ OPTIONS:
     -V, -v, --version            Print the app version and exit.
     -h, --help                   Show this help text.
 
-If run without flags, the tool checks every bookmark in the default profile.
-Use --clean after a previous run created bookmark_failures.yml to prune those entries.
+GUIDE:
+    - Run `bookmark-checker --scan` (or `-s`) to audit bookmarks.
+    - Use `--max-bookmarks` with `--scan` to limit the number checked.
+    - Run `--clean` after a scan writes bookmark_failures.yml to prune entries.
+    - Use `--list-profiles` to discover Chrome profiles before scanning.
+    - Run without flags or use `--help` anytime to view this message again.
 "#;
 
 fn main() {
+    if env::args().len() == 1 {
+        println!("{HELP}");
+        return;
+    }
+
     let config = match parse_args() {
         Ok(config) => config,
         Err(message) => {
@@ -44,6 +54,7 @@ fn main() {
 fn parse_args() -> Result<RunConfig, String> {
     let mut args = env::args().skip(1);
     let mut config = RunConfig::default();
+    config.scan = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -70,6 +81,9 @@ fn parse_args() -> Result<RunConfig, String> {
             "--clean" | "-c" => {
                 config.clean = true;
             }
+            "--scan" | "-s" => {
+                config.scan = true;
+            }
             "--version" | "-V" | "-v" => {
                 config.show_version = true;
             }
@@ -87,13 +101,37 @@ fn parse_args() -> Result<RunConfig, String> {
         return Err("--clean cannot be combined with --list-profiles".into());
     }
 
+    if config.scan && config.clean {
+        return Err("--scan cannot be combined with --clean".into());
+    }
+
+    if config.scan && config.list_profiles {
+        return Err("--scan cannot be combined with --list-profiles".into());
+    }
+
     if config.show_version
         && (config.clean
             || config.list_profiles
             || config.max_bookmarks.is_some()
-            || config.profile.is_some())
+            || config.profile.is_some()
+            || config.scan)
     {
         return Err("--version cannot be combined with other options".into());
+    }
+
+    if config.max_bookmarks.is_some() && !config.scan {
+        return Err("--max-bookmarks requires --scan".into());
+    }
+
+    if config.profile.is_some() && !config.scan && !config.clean {
+        return Err("--profile requires --scan or --clean".into());
+    }
+
+    if !config.scan && !config.clean && !config.list_profiles && !config.show_version {
+        // Without a primary action this should have been caught earlier. Treat as misuse.
+        return Err(
+            "No action provided. Use --scan, --clean, --list-profiles, or --version.".into(),
+        );
     }
 
     Ok(config)

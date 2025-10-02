@@ -29,13 +29,27 @@ pub enum BookmarkError {
     ReportParse(serde_yaml::Error),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RunConfig {
     pub max_bookmarks: Option<usize>,
     pub list_profiles: bool,
+    pub scan: bool,
     pub profile: Option<String>,
     pub clean: bool,
     pub show_version: bool,
+}
+
+impl Default for RunConfig {
+    fn default() -> Self {
+        Self {
+            max_bookmarks: None,
+            list_profiles: false,
+            scan: true,
+            profile: None,
+            clean: false,
+            show_version: false,
+        }
+    }
 }
 
 impl Display for BookmarkError {
