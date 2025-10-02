@@ -1,6 +1,7 @@
 use crate::checker::check_bookmarks;
+use crate::cleaner;
 use crate::model::{Bookmark, BookmarkError, BookmarkLocation, RunConfig};
-use crate::report::FailureReporter;
+use crate::report::{FAILURE_REPORT_FILE, FailureReporter};
 use crate::{locator, parser};
 use std::fs;
 use std::path::Path;
@@ -10,6 +11,10 @@ pub fn run() -> Result<(), BookmarkError> {
 }
 
 pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
+    if config.clean {
+        return clean_from_report(&config);
+    }
+
     if config.list_profiles {
         print_available_profiles()?;
         return Ok(());
@@ -46,6 +51,51 @@ pub fn run_with_config(config: RunConfig) -> Result<(), BookmarkError> {
             "Logged {} unreachable bookmarks to {}",
             failures.len(),
             reporter.output_path().display()
+        );
+    }
+
+    Ok(())
+}
+
+fn clean_from_report(config: &RunConfig) -> Result<(), BookmarkError> {
+    let location = locator::locate_profile(config.profile.as_deref())?;
+    let report_path = Path::new(FAILURE_REPORT_FILE);
+
+    if !report_path.exists() {
+        println!("No {} file found; nothing to clean.", report_path.display());
+        return Ok(());
+    }
+
+    let result = cleaner::clean_failures(&location, report_path)?;
+    let backup = result.backup_path.as_ref();
+
+    if result.removed > 0 {
+        if let Some(path) = backup {
+            println!(
+                "Backed up {} to {} and removed {} bookmark(s) listed in {}.",
+                location.file.display(),
+                path.display(),
+                result.removed,
+                report_path.display()
+            );
+        } else {
+            println!(
+                "Removed {} bookmark(s) listed in {}.",
+                result.removed,
+                report_path.display()
+            );
+        }
+    } else if let Some(path) = backup {
+        println!(
+            "No bookmarks in {} matched entries from {}. Backup saved to {}.",
+            location.file.display(),
+            report_path.display(),
+            path.display()
+        );
+    } else {
+        println!(
+            "{} contained no bookmark entries to clean; nothing removed.",
+            report_path.display()
         );
     }
 

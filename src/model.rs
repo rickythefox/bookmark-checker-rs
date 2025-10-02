@@ -23,8 +23,10 @@ pub enum BookmarkError {
     ProfileNotFound(String),
     Io(io::Error),
     InvalidFormat(serde_json::Error),
+    BookmarkSerialization(serde_json::Error),
     HttpClientBuild(reqwest::Error),
     ReportWrite(serde_yaml::Error),
+    ReportParse(serde_yaml::Error),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -32,6 +34,7 @@ pub struct RunConfig {
     pub max_bookmarks: Option<usize>,
     pub list_profiles: bool,
     pub profile: Option<String>,
+    pub clean: bool,
 }
 
 impl Display for BookmarkError {
@@ -60,11 +63,17 @@ impl Display for BookmarkError {
             BookmarkError::InvalidFormat(err) => {
                 write!(f, "Failed to parse bookmarks file: {err}")
             }
+            BookmarkError::BookmarkSerialization(err) => {
+                write!(f, "Failed to serialize bookmarks file: {err}")
+            }
             BookmarkError::HttpClientBuild(err) => {
                 write!(f, "Failed to create HTTP client: {err}")
             }
             BookmarkError::ReportWrite(err) => {
                 write!(f, "Failed to write YAML report: {err}")
+            }
+            BookmarkError::ReportParse(err) => {
+                write!(f, "Failed to parse YAML report: {err}")
             }
         }
     }
@@ -75,8 +84,10 @@ impl StdError for BookmarkError {
         match self {
             BookmarkError::Io(err) => Some(err),
             BookmarkError::InvalidFormat(err) => Some(err),
+            BookmarkError::BookmarkSerialization(err) => Some(err),
             BookmarkError::HttpClientBuild(err) => Some(err),
             BookmarkError::ReportWrite(err) => Some(err),
+            BookmarkError::ReportParse(err) => Some(err),
             _ => None,
         }
     }

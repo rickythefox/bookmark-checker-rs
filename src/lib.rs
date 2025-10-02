@@ -1,4 +1,5 @@
 mod checker;
+mod cleaner;
 mod locator;
 mod model;
 mod parser;

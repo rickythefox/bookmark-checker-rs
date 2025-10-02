@@ -2,8 +2,7 @@ use bookmark_checker::{RunConfig, run_with_config};
 use std::env;
 use std::process;
 
-const USAGE: &str =
-    "Usage: bookmark-checker [--max-bookmarks <count>] [--list-profiles] [--profile <name>]";
+const USAGE: &str = "Usage: bookmark-checker [--max-bookmarks <count>] [--list-profiles] [--profile <name>] [--clean]";
 
 fn main() {
     let config = match parse_args() {
@@ -46,6 +45,9 @@ fn parse_args() -> Result<RunConfig, String> {
                     .ok_or_else(|| "--profile requires a profile name".to_string())?;
                 config.profile = Some(value);
             }
+            "--clean" | "-c" => {
+                config.clean = true;
+            }
             "--help" | "-h" => {
                 println!("{USAGE}");
                 process::exit(0);
@@ -54,6 +56,10 @@ fn parse_args() -> Result<RunConfig, String> {
                 return Err(format!("Unknown argument '{unknown}'"));
             }
         }
+    }
+
+    if config.clean && config.list_profiles {
+        return Err("--clean cannot be combined with --list-profiles".into());
     }
 
     Ok(config)
