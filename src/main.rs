@@ -2,13 +2,29 @@ use bookmark_checker::{RunConfig, run_with_config};
 use std::env;
 use std::process;
 
-const USAGE: &str = "Usage: bookmark-checker [--max-bookmarks <count>] [--list-profiles] [--profile <name>] [--clean]";
+const HELP: &str = r#"bookmark-checker — audit Chrome bookmarks for unreachable URLs.
+
+USAGE:
+    bookmark-checker [OPTIONS]
+    bookmark-checker --list-profiles
+    bookmark-checker --clean [--profile <name>]
+
+OPTIONS:
+    -m, --max-bookmarks <count>  Limit how many bookmarks to check before stopping.
+    -l, --list-profiles          List detected Chrome profiles and exit.
+    -p, --profile <name>         Select a profile instead of the default "Default".
+    -c, --clean                  Remove bookmarks listed in bookmark_failures.yml.
+    -h, --help                   Show this help text.
+
+If run without flags, the tool checks every bookmark in the default profile.
+Use --clean after a previous run created bookmark_failures.yml to prune those entries.
+"#;
 
 fn main() {
     let config = match parse_args() {
         Ok(config) => config,
         Err(message) => {
-            eprintln!("{message}\n{USAGE}");
+            eprintln!("{message}\n{HELP}");
             process::exit(2);
         }
     };
@@ -49,7 +65,7 @@ fn parse_args() -> Result<RunConfig, String> {
                 config.clean = true;
             }
             "--help" | "-h" => {
-                println!("{USAGE}");
+                println!("{HELP}");
                 process::exit(0);
             }
             unknown => {
