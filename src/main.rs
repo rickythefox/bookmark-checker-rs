@@ -2,7 +2,8 @@ use bookmark_checker::{RunConfig, run_with_config};
 use std::env;
 use std::process;
 
-const USAGE: &str = "Usage: bookmark-checker [--max-bookmarks <count>] [--list-profiles]";
+const USAGE: &str =
+    "Usage: bookmark-checker [--max-bookmarks <count>] [--list-profiles] [--profile <name>]";
 
 fn main() {
     let config = match parse_args() {
@@ -38,6 +39,12 @@ fn parse_args() -> Result<RunConfig, String> {
             }
             "--list-profiles" | "-l" => {
                 config.list_profiles = true;
+            }
+            "--profile" | "-p" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--profile requires a profile name".to_string())?;
+                config.profile = Some(value);
             }
             "--help" | "-h" => {
                 println!("{USAGE}");

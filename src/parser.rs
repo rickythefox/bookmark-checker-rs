@@ -108,4 +108,10 @@ mod tests {
             }]
         );
     }
+
+    #[test]
+    fn parsing_invalid_json_returns_error() {
+        let result = parse_bookmarks("not json");
+        assert!(result.is_err());
+    }
 }

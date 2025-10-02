@@ -8,6 +8,14 @@ use std::time::Duration;
 pub(crate) struct LinkFailure {
     pub(crate) bookmark: Bookmark,
     pub(crate) reason: String,
+    pub(crate) kind: FailureKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FailureKind {
+    NotFound,
+    Unauthorized,
+    Connection,
 }
 
 pub(crate) fn check_bookmarks(bookmarks: &[Bookmark]) -> Result<Vec<LinkFailure>, BookmarkError> {
@@ -59,13 +67,12 @@ fn build_client() -> Result<Client, BookmarkError> {
 
 fn check_single(bookmark: &Bookmark, client: &Client) -> Option<LinkFailure> {
     match client.get(&bookmark.url).send() {
-        Ok(response) => {
-            if response.status() == StatusCode::NOT_FOUND {
+        Ok(response) => match response.status() {
+            StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
                 Some(LinkFailure::from_status(bookmark, response.status()))
-            } else {
-                None
             }
-        }
+            _ => None,
+        },
         Err(err) => Some(LinkFailure::from_error(bookmark, &err)),
     }
 }
@@ -76,6 +83,11 @@ impl LinkFailure {
         Self {
             bookmark: bookmark.clone(),
             reason: format!("HTTP {} {}", status.as_u16(), canonical),
+            kind: match status {
+                StatusCode::NOT_FOUND => FailureKind::NotFound,
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => FailureKind::Unauthorized,
+                _ => FailureKind::Connection,
+            },
         }
     }
 
@@ -83,6 +95,7 @@ impl LinkFailure {
         Self {
             bookmark: bookmark.clone(),
             reason: format!("Request failed: {err}"),
+            kind: FailureKind::Connection,
         }
     }
 }
@@ -107,5 +120,17 @@ mod tests {
         let failure = LinkFailure::from_status(&bookmark, StatusCode::NOT_FOUND);
         assert_eq!(failure.reason, "HTTP 404 Not Found");
         assert_eq!(failure.bookmark.url, bookmark.url);
+        assert_eq!(failure.kind, FailureKind::NotFound);
+    }
+
+    #[test]
+    fn unauthorized_status_maps_to_unauthorized_kind() {
+        let bookmark = Bookmark {
+            name: "Auth".into(),
+            url: "https://example/auth".into(),
+        };
+
+        let failure = LinkFailure::from_status(&bookmark, StatusCode::UNAUTHORIZED);
+        assert_eq!(failure.kind, FailureKind::Unauthorized);
     }
 }

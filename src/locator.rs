@@ -21,6 +21,16 @@ pub(crate) fn list_profiles() -> Result<Vec<BookmarkLocation>, BookmarkError> {
     collect_profiles_from(&root)
 }
 
+pub(crate) fn locate_profile(profile: Option<&str>) -> Result<BookmarkLocation, BookmarkError> {
+    match profile {
+        None => locate(),
+        Some(name) => {
+            let root = profiles_root()?;
+            find_profile_by_name(&root, name)
+        }
+    }
+}
+
 fn profiles_root() -> Result<PathBuf, BookmarkError> {
     let default_dir = bookmarks_directory().ok_or(BookmarkError::UnsupportedPlatform)?;
     default_dir
@@ -50,6 +60,23 @@ fn collect_profiles_from(root: &Path) -> Result<Vec<BookmarkLocation>, BookmarkE
     profiles.sort_by(|a, b| a.directory.cmp(&b.directory));
 
     Ok(profiles)
+}
+
+fn find_profile_by_name(root: &Path, name: &str) -> Result<BookmarkLocation, BookmarkError> {
+    let target = name.to_ascii_lowercase();
+    let profiles = collect_profiles_from(root)?;
+
+    profiles
+        .into_iter()
+        .find(|profile| {
+            profile
+                .directory
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(|candidate| candidate.to_ascii_lowercase() == target)
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| BookmarkError::ProfileNotFound(name.to_string()))
 }
 
 #[cfg(target_os = "macos")]
@@ -230,6 +257,32 @@ mod tests {
                 .iter()
                 .any(|profile| profile.directory == profile_dir)
         );
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn find_profile_by_name_is_case_insensitive() {
+        let root = temp_profile_root();
+        let profile_dir = root.join("Profile 2");
+
+        fs::create_dir_all(&profile_dir).unwrap();
+        fs::write(profile_dir.join("Bookmarks"), "{}").unwrap();
+
+        let location = find_profile_by_name(&root, "profile 2").expect("profile should be found");
+        assert_eq!(location.directory, profile_dir);
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn find_profile_by_name_errors_for_unknown_profile() {
+        let root = temp_profile_root();
+        let err = find_profile_by_name(&root, "Missing").expect_err("should error");
+        match err {
+            BookmarkError::ProfileNotFound(name) => assert_eq!(name, "Missing"),
+            other => panic!("unexpected error: {other:?}"),
+        }
 
         fs::remove_dir_all(&root).unwrap();
     }
